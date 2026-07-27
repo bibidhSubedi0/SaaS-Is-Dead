@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+src-tauri/target/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Environment and secrets
+.env
+.env.*
+credentials.json
+token_export.json
+
+# Debug files
+debug_err.txt
+debug_out.txt
+debug.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.sw?
