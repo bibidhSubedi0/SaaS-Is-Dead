@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>calendar-dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app" data-tauri-drag-region>
+      <header class="header" data-tauri-drag-region>
+        <span class="date-label" id="today-date"></span>
+        <div class="header-buttons">
+          <button id="refresh-btn" class="icon-btn" title="Refresh">
+            <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6a5.94 5.94 0 0 1 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+          </button>
+          <button id="close-btn" class="icon-btn icon-btn-close" title="Close">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18.3 5.71L12 12.01l-6.3-6.3-1.4 1.42L10.59 13.4l-6.3 6.3 1.41 1.41L12 14.83l6.3 6.3 1.41-1.41-6.3-6.3 6.3-6.3z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="scroll-area">
+        <p id="note-text" class="note-entry"></p>
+
+        <section class="panel">
+          <h2 class="section-label">Today</h2>
+          <ul id="task-list" class="task-list"></ul>
+          <button id="fixed-toggle" class="fixed-toggle" style="display:none">
+            <span id="fixed-toggle-label"></span>
+            <svg class="chev" viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+          </button>
+          <ul id="fixed-list" class="task-list fixed-list collapsed"></ul>
+        </section>
+
+        <section class="panel">
+          <h2 class="section-label">This Week</h2>
+
+          <div class="week-grid" id="week-grid"></div>
+
+          <div class="progress-wrap">
+            <div class="progress-bar">
+              <div class="progress-seg progress-done" id="prog-done"></div>
+              <div class="progress-seg progress-missed" id="prog-missed"></div>
+              <div class="progress-seg progress-partial" id="prog-partial"></div>
+              <div class="progress-seg progress-pending" id="prog-pending"></div>
+            </div>
+            <div class="progress-info">
+              <span class="progress-pct" id="chart-center-value">–</span>
+              <span class="progress-label">complete</span>
+            </div>
+          </div>
+
+          <div class="week-stats-inline">
+            <span class="stat-inline"><span class="stat-dot-inline" style="background: var(--done)"></span><span id="stat-done">–</span> done</span>
+            <span class="stat-inline"><span class="stat-dot-inline" style="background: var(--missed)"></span><span id="stat-missed">–</span> missed</span>
+            <span class="stat-inline"><span class="stat-dot-inline" style="background: var(--partial)"></span><span id="stat-partial">–</span> partial</span>
+            <span class="stat-inline"><span class="stat-dot-inline" style="background: var(--pending)"></span><span id="stat-pending">–</span> pending</span>
+          </div>
+
+          <div id="day-panel" class="day-panel expanded">
+            <div class="day-panel-header">
+              <span id="day-panel-title">This Week</span>
+              <button id="day-panel-close" class="icon-btn" title="Close" style="display:none">
+                <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M18.3 5.71L12 12.01l-6.3-6.3-1.4 1.42L10.59 13.4l-6.3 6.3 1.41 1.41L12 14.83l6.3 6.3 1.41-1.41-6.3-6.3 6.3-6.3z"/></svg>
+              </button>
+            </div>
+            <div id="day-panel-body"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
