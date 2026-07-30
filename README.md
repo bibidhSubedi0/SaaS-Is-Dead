@@ -8,3 +8,4 @@ A collection of small, self-built software tools — because sometimes a SaaS su
 |---------|-------------|-------|
 | [calendar-dashboard](calendar-dashboard/) | Always-on-top Google Calendar task tracker with weekly stats | Tauri v2, Rust, TypeScript |
 | [time-tracker](time-tracker/) | Minimal always-on-top desktop time tracker with category stats and doughnut charts | Tauri v2, Rust, TypeScript, Chart.js |
+| [flashmind](flashmind/) | Offline-first flashcard app with image/audio attachments and auto-save | React 19, TypeScript, Vite, Tailwind CSS |

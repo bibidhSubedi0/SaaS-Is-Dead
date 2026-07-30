@@ -1,0 +1,137 @@
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Play, Edit3, Trash2, Plus, BookOpen } from 'lucide-react';
+import { useSet, useCards, useSets } from '../hooks/useDB';
+import RichText from '../components/RichText';
+
+export default function SetDetail() {
+  const { id } = useParams();
+  const setId = Number(id);
+  const navigate = useNavigate();
+  const set = useSet(setId);
+  const { cards } = useCards(setId);
+  const { deleteSet } = useSets();
+
+  const handleDelete = async () => {
+    if (confirm('Delete this set and all its cards?')) {
+      await deleteSet(setId);
+      navigate('/');
+    }
+  };
+
+  if (!set) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3">
+        <div className="text-[var(--color-text-muted)]">
+          {Number.isNaN(setId) ? "That link is invalid." : "Set not found."}
+        </div>
+        <button
+          onClick={() => navigate('/')}
+          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-ink)] text-sm font-semibold hover:bg-[var(--color-accent-hover)] transition-colors"
+        >
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-full p-6 md:p-8">
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => navigate('/')}
+          className="w-9 h-9 rounded-lg border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all"
+        >
+          <ArrowLeft size={16} />
+        </button>
+        <div className="flex-1">
+          <h1 className="font-display font-semibold text-2xl">{set.title}</h1>
+          {set.description && (
+            <p className="text-sm text-[var(--color-text-secondary)]">{set.description}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate(`/practice/${setId}`)}
+            disabled={cards.length === 0}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-success)] text-[var(--color-paper-ink)] text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+          >
+            <Play size={14} />
+            Practice ({cards.length})
+          </button>
+          <button
+            onClick={() => navigate(`/set/${setId}`)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all"
+          >
+            <Edit3 size={14} />
+            Edit
+          </button>
+          <button
+            onClick={handleDelete}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-bg)] transition-all"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      {cards.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center justify-center py-20 text-center"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-[var(--color-bg-card)] border border-[var(--color-border)] flex items-center justify-center mb-4">
+            <BookOpen size={28} className="text-[var(--color-text-muted)]" />
+          </div>
+          <h3 className="font-display font-medium text-lg mb-1">No cards yet</h3>
+          <p className="text-sm text-[var(--color-text-muted)] mb-4">Add some cards to get started</p>
+          <Link
+            to={`/set/${setId}`}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-ink)] text-sm font-semibold hover:bg-[var(--color-accent-hover)] transition-colors"
+          >
+            <Plus size={14} /> Edit Set
+          </Link>
+        </motion.div>
+      ) : (
+        <div className="space-y-3">
+          {cards.map((card, i) => (
+            <motion.div
+              key={card.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.03 }}
+              className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4"
+            >
+              <div className="flex items-start gap-4">
+                <span className="font-data text-xs font-medium text-[var(--color-text-muted)] bg-[var(--color-bg-secondary)] px-2 py-0.5 rounded-md shrink-0 mt-1">
+                  #{i + 1}
+                </span>
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="font-data text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">Term</div>
+                    <div className="text-sm font-medium">{card.term}</div>
+                  </div>
+                  <div>
+                    <div className="font-data text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] mb-1">Definition</div>
+                    <RichText text={card.definition} className="text-sm text-[var(--color-text-secondary)]" />
+                    {card.definitionAttachments && card.definitionAttachments.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {card.definitionAttachments.filter(a => a.type === 'image').map((att, j) => (
+                          <img key={j} src={att.data} alt={att.name} className="max-w-full max-h-64 rounded-lg object-contain border border-[var(--color-border)]" />
+                        ))}
+                        {card.definitionAttachments.filter(a => a.type === 'audio').map((att, j) => (
+                          <audio key={j} controls src={att.data} className="h-8" />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,254 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* Base surfaces — warm near-black, not violet-black */
+  --color-bg-primary: #0b0d12;
+  --color-bg-secondary: #111319;
+  --color-bg-card: #14161d;
+  --color-bg-card-hover: #191c24;
+  --color-bg-elevated: #20232e;
+  --color-border: #262a35;
+  --color-border-light: #34394a;
+
+  /* Text — warm "index card" paper white, not blue-white */
+  --color-text-primary: #f3efe4;
+  --color-text-secondary: #9b9dab;
+  --color-text-muted: #5c5f6d;
+
+  /* Signal — a single highlighter amber, spent deliberately */
+  --color-accent: #ffb400;
+  --color-accent-hover: #ffc333;
+  --color-accent-glow: rgba(255, 180, 0, 0.28);
+  --color-accent-ink: #1c1304;
+
+  --color-success: #5fd38d;
+  --color-success-bg: rgba(95, 211, 141, 0.14);
+  --color-danger: #ff6b6b;
+  --color-danger-bg: rgba(255, 107, 107, 0.14);
+  --color-warning: #ffb400;
+
+  /* Paper — the literal card face color, used only on card surfaces */
+  --color-paper: #f6f1e4;
+  --color-paper-dim: #e9e2ce;
+  --color-paper-ink: #1c1a14;
+  --color-paper-ink-dim: #6b6656;
+  --color-paper-rule: #d8cfb4;
+}
+
+/* Folder tab palette — cycled by index, catalog-drawer style */
+:root {
+  --tab-1: #ffb400;
+  --tab-2: #5fb3ff;
+  --tab-3: #5fd38d;
+  --tab-4: #ff6b6b;
+  --tab-5: #c792ff;
+  --tab-6: #ff8fb1;
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--color-bg-primary);
+    background-image: radial-gradient(ellipse 900px 500px at 15% -10%, rgba(255, 180, 0, 0.05), transparent 60%);
+    color: var(--color-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  input, textarea, select {
+    font-family: 'Inter', sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-light);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px var(--color-accent-glow); }
+  50% { box-shadow: 0 0 40px var(--color-accent-glow); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out forwards;
+}
+
+/* ---------------------------------------------------------------- */
+/* Signature: the deck. Sets on the dashboard are a stack of cards,  */
+/* not a flat tile — two faint sibling cards peek out behind the top. */
+/* ---------------------------------------------------------------- */
+.deck-stack {
+  position: relative;
+}
+
+.deck-stack::before,
+.deck-stack::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0.75rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  z-index: -1;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.deck-stack::before {
+  transform: translate(5px, 6px) rotate(1.2deg);
+}
+
+.deck-stack::after {
+  transform: translate(10px, 12px) rotate(2.4deg);
+  opacity: 0.7;
+}
+
+.deck-stack:hover::before {
+  transform: translate(7px, 9px) rotate(1.6deg);
+}
+
+.deck-stack:hover::after {
+  transform: translate(14px, 17px) rotate(3.1deg);
+}
+
+/* ---------------------------------------------------------------- */
+/* Signature: catalog tabs. Colored folder chips, like index dividers */
+/* ---------------------------------------------------------------- */
+.tab-chip {
+  position: relative;
+  padding-left: 1rem;
+}
+
+.tab-chip::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.15em;
+  bottom: 0.15em;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--tab-color, var(--color-accent));
+}
+
+/* ---------------------------------------------------------------- */
+/* Signature: the physical practice card. Paper face, ruled line     */
+/* under the term, punch-holes at the top like a ring-bound card,    */
+/* and a torn/perforated edge.                                       */
+/* ---------------------------------------------------------------- */
+.study-card-face {
+  background:
+    radial-gradient(circle at 12% 8%, rgba(0,0,0,0.03), transparent 40%),
+    var(--color-paper);
+  color: var(--color-paper-ink);
+}
+
+.study-card-face--back {
+  background:
+    radial-gradient(circle at 88% 92%, rgba(0,0,0,0.04), transparent 40%),
+    var(--color-paper-dim);
+  color: var(--color-paper-ink);
+}
+
+.study-card-face,
+.study-card-face--back {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.study-card-face--back {
+  transform: rotateY(180deg);
+}
+
+.study-card-face::before,
+.study-card-face--back::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 9px;
+  background-image: radial-gradient(circle 4.5px at 4.5px 0, var(--color-bg-primary) 4.5px, transparent 4.6px);
+  background-size: 18px 9px;
+  background-repeat: repeat-x;
+  background-position: top left;
+  pointer-events: none;
+}
+
+.punch-holes {
+  position: absolute;
+  top: 14px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  pointer-events: none;
+}
+
+.punch-holes span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--color-bg-primary);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.rule-line {
+  width: 64px;
+  height: 2px;
+  background: var(--color-paper-rule);
+  border-radius: 1px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Utility: mono data marks — counters, ids, catalog numbers          */
+/* ---------------------------------------------------------------- */
+.font-data {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
