@@ -3,11 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "dashboard": "./bin/dashboard.mjs"
+  },
+  "workspaces": [
+    "dashboard"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "dashboard": "npm run build -w dashboard && node dashboard-server.mjs",
+    "dashboard:dev": "node dashboard-server.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

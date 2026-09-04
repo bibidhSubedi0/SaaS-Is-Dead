@@ -12,6 +12,7 @@ pub struct Category {
     pub name: String,
     pub color: String,
     pub sort_order: i32,
+    pub daily_goal_secs: i64,
 }
 
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -71,11 +72,12 @@ fn dirs_home() -> Option<PathBuf> {
 pub fn init_db(conn: &Connection) -> SqlResult<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS categories (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            name        TEXT NOT NULL UNIQUE,
-            color       TEXT DEFAULT '#e8a85c',
-            sort_order  INTEGER DEFAULT 0,
-            created_at  TEXT DEFAULT (datetime('now'))
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT NOT NULL UNIQUE,
+            color           TEXT DEFAULT '#e8a85c',
+            sort_order      INTEGER DEFAULT 0,
+            daily_goal_secs INTEGER DEFAULT 0,
+            created_at      TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS time_entries (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,23 +93,35 @@ pub fn init_db(conn: &Connection) -> SqlResult<()> {
         PRAGMA foreign_keys = ON;"
     )?;
 
+    // Migration: add daily_goal_secs to existing databases
+    let cols: Vec<String> = conn
+        .prepare("PRAGMA table_info(categories)")?
+        .query_map([], |row| row.get(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if !cols.iter().any(|c| c == "daily_goal_secs") {
+        conn.execute(
+            "ALTER TABLE categories ADD COLUMN daily_goal_secs INTEGER DEFAULT 0",
+            [],
+        )?;
+    }
+
     // Seed default categories if empty
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))?;
     if count == 0 {
         let defaults = vec![
-            ("Getting Cracked", "#e8a85c"),
-            ("Books and Movies", "#7babb0"),
-            ("Academics", "#9caf88"),
-            ("School Projects", "#d99a6c"),
-            ("Other Productive Work", "#c97b7b"),
-            ("Video Games", "#a78bfa"),
-            ("Guitar", "#f472b6"),
-            ("Slagging", "#5a4f4a"),
+            ("Getting Cracked", "#e8a85c", 7200),
+            ("Books and Movies", "#7babb0", 7200),
+            ("Academics", "#9caf88", 7200),
+            ("School Projects", "#d99a6c", 7200),
+            ("Other Productive Work", "#c97b7b", 7200),
+            ("Video Games", "#a78bfa", 7200),
+            ("Guitar", "#f472b6", 7200),
+            ("Slagging", "#5a4f4a", 7200),
         ];
-        for (i, (name, color)) in defaults.iter().enumerate() {
+        for (i, (name, color, goal)) in defaults.iter().enumerate() {
             conn.execute(
-                "INSERT INTO categories (name, color, sort_order) VALUES (?1, ?2, ?3)",
-                params![name, color, i as i32],
+                "INSERT INTO categories (name, color, sort_order, daily_goal_secs) VALUES (?1, ?2, ?3, ?4)",
+                params![name, color, i as i32, goal],
             )?;
         }
     }
@@ -118,25 +132,26 @@ pub fn init_db(conn: &Connection) -> SqlResult<()> {
 // ---------- Category queries ----------
 
 pub fn fetch_categories(conn: &Connection) -> SqlResult<Vec<Category>> {
-    let mut stmt = conn.prepare("SELECT id, name, color, sort_order FROM categories ORDER BY sort_order, id")?;
+    let mut stmt = conn.prepare("SELECT id, name, color, sort_order, daily_goal_secs FROM categories ORDER BY sort_order, id")?;
     let rows = stmt.query_map([], |row| {
         Ok(Category {
             id: row.get(0)?,
             name: row.get(1)?,
             color: row.get(2)?,
             sort_order: row.get(3)?,
+            daily_goal_secs: row.get(4)?,
         })
     })?;
     rows.collect()
 }
 
-pub fn insert_category(conn: &Connection, name: &str, color: &str) -> SqlResult<Category> {
+pub fn insert_category(conn: &Connection, name: &str, color: &str, daily_goal_secs: i64) -> SqlResult<Category> {
     let max_order: i32 = conn
         .query_row("SELECT COALESCE(MAX(sort_order), -1) FROM categories", [], |r| r.get(0))
         .unwrap_or(-1);
     conn.execute(
-        "INSERT INTO categories (name, color, sort_order) VALUES (?1, ?2, ?3)",
-        params![name, color, max_order + 1],
+        "INSERT INTO categories (name, color, sort_order, daily_goal_secs) VALUES (?1, ?2, ?3, ?4)",
+        params![name, color, max_order + 1, daily_goal_secs],
     )?;
     let id = conn.last_insert_rowid();
     Ok(Category {
@@ -144,6 +159,7 @@ pub fn insert_category(conn: &Connection, name: &str, color: &str) -> SqlResult<
         name: name.to_string(),
         color: color.to_string(),
         sort_order: max_order + 1,
+        daily_goal_secs,
     })
 }
 
@@ -153,16 +169,17 @@ pub fn delete_category(conn: &Connection, id: i64) -> SqlResult<()> {
     Ok(())
 }
 
-pub fn update_category(conn: &Connection, id: i64, name: &str, color: &str) -> SqlResult<Category> {
+pub fn update_category(conn: &Connection, id: i64, name: &str, color: &str, daily_goal_secs: i64) -> SqlResult<Category> {
     conn.execute(
-        "UPDATE categories SET name = ?1, color = ?2 WHERE id = ?3",
-        params![name, color, id],
+        "UPDATE categories SET name = ?1, color = ?2, daily_goal_secs = ?3 WHERE id = ?4",
+        params![name, color, daily_goal_secs, id],
     )?;
     Ok(Category {
         id,
         name: name.to_string(),
         color: color.to_string(),
         sort_order: 0,
+        daily_goal_secs,
     })
 }
 
@@ -192,6 +209,7 @@ pub fn fetch_running_entry(conn: &Connection) -> SqlResult<Option<RunningTimer>>
                     name: row.get(2)?,
                     color: row.get(3)?,
                     sort_order: 0,
+                    daily_goal_secs: 0,
                 },
             })
         },
@@ -211,13 +229,14 @@ pub fn insert_start(conn: &Connection, category_id: i64) -> SqlResult<RunningTim
     )?;
     let id = conn.last_insert_rowid();
     let cat: Category = conn.query_row(
-        "SELECT id, name, color, sort_order FROM categories WHERE id = ?1",
+        "SELECT id, name, color, sort_order, daily_goal_secs FROM categories WHERE id = ?1",
         params![category_id],
         |row| Ok(Category {
             id: row.get(0)?,
             name: row.get(1)?,
             color: row.get(2)?,
             sort_order: row.get(3)?,
+            daily_goal_secs: row.get(4)?,
         }),
     )?;
     Ok(RunningTimer {

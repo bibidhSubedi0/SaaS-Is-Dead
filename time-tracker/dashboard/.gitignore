@@ -12,9 +12,6 @@ dist
 dist-ssr
 *.local
 
-# Dashboard build output
-dashboard/dist
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

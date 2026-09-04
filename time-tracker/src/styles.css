@@ -104,6 +104,53 @@ html, body {
   position: relative;
 }
 
+/* ---------- Today summary ---------- */
+
+.today-summary {
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 14px 16px 12px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(232, 168, 92, 0.12);
+}
+
+.summary-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.summary-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+}
+
+.summary-time {
+  font-family: "Sora", sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--amber);
+}
+
+.summary-bar {
+  height: 5px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.summary-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--amber);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
 /* ---------- Category list ---------- */
 
 .category-list {
@@ -117,8 +164,8 @@ html, body {
 
 .category-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
   background: var(--panel);
   padding: 10px 12px;
   border-radius: 12px;
@@ -127,6 +174,12 @@ html, body {
 }
 .category-row:hover {
   background: var(--panel-hover);
+}
+
+.cat-row-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .cat-dot {
@@ -142,13 +195,64 @@ html, body {
   font-weight: 500;
 }
 
+.cat-times {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .cat-time {
-  color: var(--text-faint);
   font-family: "Sora", sans-serif;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
-  min-width: 40px;
+  min-width: 32px;
   text-align: right;
+}
+
+.cat-time-today {
+  color: var(--text-dim);
+}
+
+.cat-time-week {
+  color: var(--text-faint);
+}
+
+.cat-time-sep {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.cat-row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cat-progress-bg {
+  flex: 1;
+  height: 3px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cat-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+  opacity: 0.7;
+}
+.cat-progress-fill.goal-met {
+  opacity: 1;
+}
+
+.cat-goal-label {
+  font-size: 9px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
 .cat-play-btn,
@@ -164,19 +268,24 @@ html, body {
   align-items: center;
   justify-content: center;
   transition: background 0.15s ease, color 0.15s ease;
-  opacity: 0;
+  flex-shrink: 0;
 }
 
-.category-row:hover .cat-play-btn,
-.category-row:hover .cat-menu-btn {
-  opacity: 1;
+.cat-play-btn {
+  color: var(--amber);
+  opacity: 0.85;
 }
-
 .cat-play-btn:hover {
   background: rgba(232, 168, 92, 0.2);
   color: var(--amber);
 }
 
+.cat-menu-btn {
+  opacity: 0;
+}
+.category-row:hover .cat-menu-btn {
+  opacity: 1;
+}
 .cat-menu-btn:hover {
   background: var(--panel-hover);
   color: var(--text-dim);
@@ -445,6 +554,16 @@ html, body {
   font-family: "Inter", system-ui, sans-serif;
   outline: none;
   transition: border-color 0.15s ease;
+}
+
+.modal-label {
+  display: block;
+  margin: 14px 0 6px 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
 }
 .modal-input:focus {
   border-color: var(--amber);

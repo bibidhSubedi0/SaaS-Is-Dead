@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::db::{self, Category, TimeEntry, CategoryStats, RunningTimer, DailyBar};
 
 pub struct AppState {
-    pub db: Mutex<Connection>,
+    pub db: std::sync::Arc<Mutex<Connection>>,
 }
 
 // ---------- Categories ----------
@@ -19,9 +19,10 @@ pub fn add_category(
     state: tauri::State<'_, AppState>,
     name: String,
     color: String,
+    daily_goal_secs: i64,
 ) -> Result<Category, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    db::insert_category(&db, &name, &color).map_err(|e| e.to_string())
+    db::insert_category(&db, &name, &color, daily_goal_secs).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -39,9 +40,10 @@ pub fn update_category(
     id: i64,
     name: String,
     color: String,
+    daily_goal_secs: i64,
 ) -> Result<Category, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_category(&db, id, &name, &color).map_err(|e| e.to_string())
+    db::update_category(&db, id, &name, &color, daily_goal_secs).map_err(|e| e.to_string())
 }
 
 // ---------- Timer ----------

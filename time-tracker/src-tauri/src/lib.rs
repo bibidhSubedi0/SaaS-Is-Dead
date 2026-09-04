@@ -1,9 +1,10 @@
+mod server;
 mod db;
 mod commands;
 
 use commands::AppState;
 use rusqlite::Connection;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -14,10 +15,11 @@ pub fn run() {
     let conn = Connection::open(&db_path)
         .expect("Failed to open database");
     db::init_db(&conn).expect("Failed to initialize database");
+    let db = Arc::new(Mutex::new(conn));
 
     tauri::Builder::default()
         .manage(AppState {
-            db: Mutex::new(conn),
+            db: db.clone(),
         })
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(
@@ -48,10 +50,12 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
-        .setup(|app| {
+        .setup(move |app| {
             use tauri_plugin_global_shortcut::Shortcut;
 
             app.autolaunch().enable()?;
+
+            server::spawn(db);
 
             let hide_shortcut: Shortcut = "ctrl+shift+KeyH".parse().unwrap();
             let toggle_top_shortcut: Shortcut = "ctrl+shift+KeyT".parse().unwrap();
@@ -76,3 +80,4 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

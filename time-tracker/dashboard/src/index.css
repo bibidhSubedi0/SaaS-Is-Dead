@@ -1,0 +1,106 @@
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Warm dark theme (default) */
+:root {
+  --c-bg: 33 29 31;
+  --c-panel: 43 37 40;
+  --c-panel-hover: 53 45 48;
+  --c-panel-edge: 58 50 53;
+  --c-sidebar: 28 24 25;
+  --c-text: 242 233 228;
+  --c-text-dim: 168 154 146;
+  --c-text-faint: 118 106 99;
+  --c-amber: 232 168 92;
+  --c-rose: 201 123 123;
+  --c-orange: 217 154 108;
+  --c-sage: 156 175 136;
+  --c-teal: 123 171 176;
+  --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -12px rgb(0 0 0 / 0.5);
+
+  --hm-0: #2b2528;
+  --hm-1: #4a3a2a;
+  --hm-2: #7a5a34;
+  --hm-3: #b3813f;
+  --hm-4: #e8a85c;
+}
+
+/* Light theme */
+html[data-theme="light"] {
+  --c-bg: 248 245 241;
+  --c-panel: 255 255 255;
+  --c-panel-hover: 246 242 237;
+  --c-panel-edge: 227 219 212;
+  --c-sidebar: 244 239 233;
+  --c-text: 45 38 36;
+  --c-text-dim: 122 109 102;
+  --c-text-faint: 168 157 150;
+  --c-amber: 205 142 60;
+  --c-rose: 190 110 110;
+  --c-orange: 205 145 96;
+  --c-sage: 138 158 118;
+  --c-teal: 105 150 156;
+  --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.7) inset, 0 10px 28px -16px rgb(90 60 30 / 0.22);
+
+  --hm-0: #ece6df;
+  --hm-1: #f1dfc0;
+  --hm-2: #e5be82;
+  --hm-3: #d9a25c;
+  --hm-4: #c9862f;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-text font-body antialiased;
+    -webkit-font-smoothing: antialiased;
+    color-scheme: dark;
+  }
+
+  html[data-theme="light"] body {
+    color-scheme: light;
+  }
+
+  ::selection {
+    background: rgb(var(--c-amber) / 0.25);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--c-panel-edge)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-panel-edge));
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-amber));
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

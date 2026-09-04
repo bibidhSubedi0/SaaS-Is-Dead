@@ -12,6 +12,7 @@ interface Category {
   name: string;
   color: string;
   sort_order: number;
+  daily_goal_secs: number;
 }
 
 interface TimeEntry {
@@ -111,17 +112,37 @@ function renderCategories() {
 
     const statsEntry = stats.find((s) => s.category.id === cat.id);
     const todayTime = statsEntry ? formatDurationShort(statsEntry.today_secs) : "0m";
+    const weekTime = statsEntry ? formatDurationShort(statsEntry.week_secs) : "0m";
+
+    const goalSecs = cat.daily_goal_secs > 0 ? cat.daily_goal_secs : 0;
+    const todaySecs = statsEntry ? statsEntry.today_secs : 0;
+    const goalPct = goalSecs > 0 ? Math.min(100, (todaySecs / goalSecs) * 100) : 0;
+    const goalMet = goalSecs > 0 && todaySecs >= goalSecs;
 
     li.innerHTML = `
-      <span class="cat-dot" style="background:${escapeHtml(cat.color)}"></span>
-      <span class="cat-name">${escapeHtml(cat.name)}</span>
-      <span class="cat-time">${todayTime}</span>
-      <button class="cat-play-btn" title="Start timer">
-        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-      </button>
-      <button class="cat-menu-btn" title="Options">
-        <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>
-      </button>
+      <div class="cat-row-top">
+        <span class="cat-dot" style="background:${escapeHtml(cat.color)}"></span>
+        <span class="cat-name">${escapeHtml(cat.name)}</span>
+        <span class="cat-times">
+          <span class="cat-time cat-time-today" title="Today">${todayTime}</span>
+          <span class="cat-time-sep">·</span>
+          <span class="cat-time cat-time-week" title="This week">${weekTime}</span>
+        </span>
+        <button class="cat-play-btn" title="Start timer">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="cat-menu-btn" title="Options">
+          <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <div class="cat-row-bottom">
+        ${goalSecs > 0 ? `
+          <div class="cat-progress-bg">
+            <div class="cat-progress-fill${goalMet ? " goal-met" : ""}" style="width:${goalPct}%;background:${escapeHtml(cat.color)}"></div>
+          </div>
+          <span class="cat-goal-label">${formatDurationShort(goalSecs)} goal</span>
+        ` : ""}
+      </div>
     `;
 
     // Start timer on play click
@@ -140,6 +161,18 @@ function renderCategories() {
 
     list.appendChild(li);
   }
+}
+
+function renderSummary() {
+  const totalSecs = stats.reduce((acc, s) => acc + s.today_secs, 0);
+  document.getElementById("today-total")!.textContent = formatDurationShort(totalSecs);
+
+  // Summary bar = fraction of the day that has elapsed so far
+  const now = new Date();
+  const daySecs = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  const pct = Math.min(100, (daySecs / 86400) * 100);
+  const bar = document.getElementById("today-bar");
+  if (bar) bar.style.width = `${pct}%`;
 }
 
 function showCategoryMenu(cat: Category, anchor: HTMLElement) {
@@ -227,8 +260,8 @@ async function stopTimer() {
     timerInterval = null;
   }
   runningTimer = null;
-  await loadCategories();
   await loadStats();
+  await loadCategories();
   showView("categories");
 }
 
@@ -250,6 +283,7 @@ async function checkRunningTimer() {
 
 async function loadStats() {
   stats = await invoke<CategoryStats[]>("get_stats");
+  renderSummary();
   if (currentView === "categories") {
     renderCategories();
   }
@@ -421,6 +455,8 @@ function showAddCategory() {
   document.getElementById("modal-title")!.textContent = "Add Category";
   const input = document.getElementById("modal-input") as HTMLInputElement;
   input.value = "";
+  const goalInput = document.getElementById("modal-goal") as HTMLInputElement;
+  goalInput.value = "";
   initColorPicker();
   document.getElementById("modal-overlay")!.style.display = "";
   input.focus();
@@ -432,6 +468,8 @@ function showEditCategory(cat: Category) {
   document.getElementById("modal-title")!.textContent = "Edit Category";
   const input = document.getElementById("modal-input") as HTMLInputElement;
   input.value = cat.name;
+  const goalInput = document.getElementById("modal-goal") as HTMLInputElement;
+  goalInput.value = cat.daily_goal_secs > 0 ? String(cat.daily_goal_secs / 3600) : "";
   initColorPicker();
   document.getElementById("modal-overlay")!.style.display = "";
   input.focus();
@@ -447,10 +485,14 @@ async function saveModal() {
   const name = input.value.trim();
   if (!name) return;
 
+  const goalInput = document.getElementById("modal-goal") as HTMLInputElement;
+  const goalHours = parseFloat(goalInput.value) || 0;
+  const dailyGoalSecs = Math.round(goalHours * 3600);
+
   if (editingCategory) {
-    await invoke("update_category", { id: editingCategory.id, name, color: selectedColor });
+    await invoke("update_category", { id: editingCategory.id, name, color: selectedColor, dailyGoalSecs });
   } else {
-    await invoke("add_category", { name, color: selectedColor });
+    await invoke("add_category", { name, color: selectedColor, dailyGoalSecs });
   }
 
   hideModal();
