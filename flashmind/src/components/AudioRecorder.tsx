@@ -27,7 +27,7 @@ export default function AudioRecorder({ audios, onChange }: AudioRecorderProps) 
   };
 
   const togglePlay = (index: number) => {
-    const audioData = audios[index].data;
+    const audioData = audios[index].url ?? audios[index].data ?? '';
     if (playingIndex === index) {
       audioRef.current[index]?.pause();
       setPlayingIndex(null);

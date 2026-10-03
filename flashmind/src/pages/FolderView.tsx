@@ -1,11 +1,29 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, Upload, Search, Layers, MoreVertical, Trash2, Edit3, FolderOpen, Plus, X, Check
+  ArrowLeft, Upload, Download, Search, Layers, MoreVertical, Trash2, Edit3, FolderOpen, Plus, X, Check
 } from 'lucide-react';
 import { useFolders, useSets } from '../hooks/useDB';
 import ImportModal from '../components/ImportModal';
+import { exportSets } from '../lib/export';
+import type { FlashcardSet } from '../lib/types';
+
+type SetSortMode = 'newest' | 'oldest' | 'name-asc' | 'name-desc';
+const SET_SORT_KEY = 'flashmind.setSort';
+
+function loadSetSort(): SetSortMode {
+  try {
+    const s = localStorage.getItem(SET_SORT_KEY);
+    if (s === 'newest' || s === 'oldest' || s === 'name-asc' || s === 'name-desc') return s;
+  } catch { /* ignore */ }
+  return 'newest';
+}
+
+function setTime(s: FlashcardSet) {
+  const t = new Date(s.updatedAt).getTime();
+  return Number.isFinite(t) ? t : (s.id ?? 0);
+}
 
 export default function FolderView() {
   const { id } = useParams();
@@ -15,6 +33,7 @@ export default function FolderView() {
   const { sets, deleteSet, updateSet } = useSets(folderId);
   const { sets: allSets } = useSets();
   const [search, setSearch] = useState('');
+  const [setSort, setSetSort] = useState<SetSortMode>(loadSetSort);
   const [showImport, setShowImport] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
@@ -23,6 +42,30 @@ export default function FolderView() {
   const filteredSets = sets.filter(s =>
     s.title.toLowerCase().includes(search.toLowerCase())
   );
+
+  const sortedSets = useMemo(() => {
+    const list = [...filteredSets];
+    switch (setSort) {
+      case 'oldest':
+        list.sort((a, b) => (setTime(a) - setTime(b)) || ((a.id ?? 0) - (b.id ?? 0)));
+        break;
+      case 'name-asc':
+        list.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? '') || ((a.id ?? 0) - (b.id ?? 0)));
+        break;
+      case 'name-desc':
+        list.sort((a, b) => (b.title ?? '').localeCompare(a.title ?? '') || ((a.id ?? 0) - (b.id ?? 0)));
+        break;
+      case 'newest':
+      default:
+        list.sort((a, b) => (setTime(b) - setTime(a)) || ((b.id ?? 0) - (a.id ?? 0)));
+    }
+    return list;
+  }, [filteredSets, setSort]);
+
+  const changeSetSort = (mode: SetSortMode) => {
+    setSetSort(mode);
+    try { localStorage.setItem(SET_SORT_KEY, mode); } catch { /* ignore */ }
+  };
 
   const availableSets = allSets.filter(s => s.folderId !== folderId);
 
@@ -62,14 +105,14 @@ export default function FolderView() {
         >
           {folder.icon}
         </div>
-        <div className="flex-1">
-          <h1 className="font-display font-semibold text-xl">{folder.name}</h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="font-display font-semibold text-xl truncate">{folder.name}</h1>
           <p className="font-data text-xs text-[var(--color-text-muted)]">{sets.length} sets</p>
         </div>
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-2 sm:gap-3 mb-8">
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
           <input
@@ -80,6 +123,14 @@ export default function FolderView() {
             className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
           />
         </div>
+        <button
+          onClick={() => exportSets(sets, `flashmind-folder-${folder.name.replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_')}.json`)}
+          disabled={sets.length === 0}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] text-sm text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all disabled:opacity-40 disabled:hover:border-[var(--color-border)] disabled:hover:text-[var(--color-text-secondary)]"
+        >
+          <Download size={16} />
+          <span className="hidden sm:inline">Export</span>
+        </button>
         <button
           onClick={() => setShowImport(true)}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] text-sm text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all"
@@ -122,8 +173,25 @@ export default function FolderView() {
           )}
         </motion.div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pb-4">
-          {filteredSets.map((set, i) => (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <span className="font-data text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+              {filteredSets.length} {filteredSets.length === 1 ? 'set' : 'sets'}
+            </span>
+            <select
+              value={setSort}
+              onChange={e => changeSetSort(e.target.value as SetSortMode)}
+              className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors cursor-pointer"
+              aria-label="Sort sets"
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name-asc">Name A&ndash;Z</option>
+              <option value="name-desc">Name Z&ndash;A</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pb-4">
+            {sortedSets.map((set, i) => (
             <motion.div
               key={set.id}
               initial={{ opacity: 0, y: 20 }}
@@ -148,7 +216,7 @@ export default function FolderView() {
                   {new Date(set.updatedAt).toLocaleDateString()}
                 </div>
               </div>
-              <div className="absolute top-3 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute top-3 right-5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === set.id ? null : set.id!); }}
                   className="w-7 h-7 rounded-lg bg-[var(--color-bg-secondary)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
@@ -187,7 +255,8 @@ export default function FolderView() {
               </div>
             </motion.div>
           ))}
-        </div>
+          </div>
+        </>
       )}
 
       <AnimatePresence>
@@ -232,7 +301,7 @@ function AddSetsModal({ availableSets, onAdd, onClose }: {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <motion.div
@@ -240,7 +309,7 @@ function AddSetsModal({ availableSets, onAdd, onClose }: {
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={e => e.stopPropagation()}
-        className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[80vh] flex flex-col"
+        className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-2xl w-full max-w-lg p-4 sm:p-6 shadow-2xl max-h-[80vh] flex flex-col"
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-display font-semibold text-lg">Add Sets to Folder</h2>

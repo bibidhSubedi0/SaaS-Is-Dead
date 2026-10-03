@@ -1,13 +1,23 @@
-import type { Folder, FlashcardSet, Card } from './types';
-import * as fsdb from './fsdb';
+import type { Folder, FlashcardSet, Card, PracticeSession, Attachment } from './types';
+import { api, setToken as persistToken, clearToken, hasToken } from './db';
 
-// In-memory cache — reads are sync, writes update cache + persist async.
 let _folders: Folder[] = [];
 let _sets: FlashcardSet[] = [];
 let _cards: Card[] = [];
+let _cardsBySet = new Map<number, Card[]>();
+let _practiceSessions: PracticeSession[] = [];
 let _loaded = false;
 
-// Multiple listeners support
+function buildCardsIndex(cards: Card[]): Map<number, Card[]> {
+  const m = new Map<number, Card[]>();
+  for (const c of cards) {
+    const list = m.get(c.setId);
+    if (list) list.push(c);
+    else m.set(c.setId, [c]);
+  }
+  return m;
+}
+
 const _listeners = new Set<() => void>();
 export function onChange(cb: () => void) {
   _listeners.add(cb);
@@ -19,67 +29,55 @@ function notify() {
 
 export function isLoaded() { return _loaded; }
 
-export async function init(): Promise<'ready' | 'need-folder'> {
-  if (_loaded) return 'ready';
-
-  const restored = await fsdb.restoreFolder();
-  if (!restored) return 'need-folder';
-
-  const data = await fsdb.loadAll();
-  _folders = Array.isArray(data.folders) ? data.folders : [];
-  _sets = Array.isArray(data.sets) ? data.sets : [];
-  _cards = Array.isArray(data.cards) ? data.cards : [];
-  _loaded = true;
-  notify();
-  return 'ready';
-}
-
-export async function setFolder(): Promise<boolean> {
-  const ok = await fsdb.pickFolder();
-  if (!ok) return false;
-  const data = await fsdb.loadAll();
-  _folders = Array.isArray(data.folders) ? data.folders : [];
-  _sets = Array.isArray(data.sets) ? data.sets : [];
-  _cards = Array.isArray(data.cards) ? data.cards : [];
-  _loaded = true;
-  notify();
-  return true;
-}
-
-// Debounced persistence — batch rapid writes into a single file write.
-let _persistTimer: ReturnType<typeof setTimeout> | null = null;
-let _pendingPersist = false;
-
-function schedulePersist() {
-  _pendingPersist = true;
-  if (_persistTimer) clearTimeout(_persistTimer);
-  _persistTimer = setTimeout(flushPersist, 100);
-}
-
-function flushPersist() {
-  if (!_pendingPersist) return;
-  _pendingPersist = false;
-  if (_persistTimer) { clearTimeout(_persistTimer); _persistTimer = null; }
-  fsdb.saveAll({ folders: _folders, sets: _sets, cards: _cards }).catch(err => {
-    console.error('Failed to save data:', err);
-  });
-}
-
-// Flush pending writes when the tab is about to close.
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', () => {
-    if (_pendingPersist) flushPersist();
-  });
-}
-
-function nextId<T extends { id?: number }>(all: T[]): number {
-  let max = 0;
-  for (const item of all) {
-    if (typeof item.id === 'number' && Number.isFinite(item.id) && item.id > max) {
-      max = item.id;
+export async function init(): Promise<'ready' | 'need-token'> {
+  if (!hasToken()) return 'need-token';
+  try {
+    const data = await api.getState();
+    _folders = data.folders;
+    _sets = data.sets;
+    _cards = data.cards;
+    _cardsBySet = buildCardsIndex(_cards);
+    _practiceSessions = data.practiceSessions;
+    _loaded = true;
+    notify();
+    return 'ready';
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('401')) {
+      clearToken();
+      return 'need-token';
     }
+    throw err;
   }
-  return max + 1;
+}
+
+export async function setToken(token: string): Promise<'ready' | 'need-token'> {
+  persistToken(token.trim());
+  _loaded = false;
+  return init();
+}
+
+function mapFolder(f: Folder): Folder {
+  return { id: f.id, name: f.name, icon: f.icon, color: f.color, createdAt: f.createdAt };
+}
+function mapSet(s: FlashcardSet): FlashcardSet {
+  return {
+    id: s.id,
+    folderId: s.folderId ?? null,
+    title: s.title,
+    description: s.description,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+  };
+}
+function mapCard(c: Card): Card {
+  return {
+    id: c.id,
+    setId: c.setId,
+    term: c.term,
+    definition: c.definition,
+    definitionAttachments: c.definitionAttachments ?? [],
+    createdAt: c.createdAt,
+  };
 }
 
 // ── Folders ──────────────────────────────────────────────────────────
@@ -88,25 +86,27 @@ export function getAllFolders(): Folder[] { return _folders; }
 export function getFolder(id: number): Folder | undefined { return _folders.find(f => f.id === id); }
 
 export async function addFolder(folder: Omit<Folder, 'id' | 'createdAt'>): Promise<Folder> {
-  const newFolder: Folder = { ...folder, id: nextId(_folders), createdAt: new Date() };
-  _folders.push(newFolder);
-  schedulePersist();
+  const created = mapFolder(await api.addFolder({ name: folder.name, icon: folder.icon, color: folder.color }));
+  _folders.push(created);
   notify();
-  return newFolder;
+  return created;
 }
 
 export async function updateFolder(id: number, changes: Partial<Folder>): Promise<void> {
+  const body: { name?: string; icon?: string; color?: string } = {};
+  if (changes.name !== undefined) body.name = changes.name;
+  if (changes.icon !== undefined) body.icon = changes.icon;
+  if (changes.color !== undefined) body.color = changes.color;
+  const updated = mapFolder(await api.updateFolder(id, body));
   const idx = _folders.findIndex(f => f.id === id);
-  if (idx === -1) return;
-  _folders[idx] = { ..._folders[idx], ...changes };
-  schedulePersist();
+  if (idx !== -1) _folders[idx] = updated;
   notify();
 }
 
 export async function deleteFolder(id: number): Promise<void> {
+  await api.deleteFolder(id);
   _folders = _folders.filter(f => f.id !== id);
   _sets = _sets.map(s => s.folderId === id ? { ...s, folderId: null } : s);
-  schedulePersist();
   notify();
 }
 
@@ -117,80 +117,128 @@ export function getSet(id: number): FlashcardSet | undefined { return _sets.find
 export function getSetsByFolder(folderId: number): FlashcardSet[] { return _sets.filter(s => s.folderId === folderId); }
 
 export async function addSet(set: Omit<FlashcardSet, 'id' | 'createdAt' | 'updatedAt'>): Promise<FlashcardSet> {
-  const newSet: FlashcardSet = { ...set, id: nextId(_sets), createdAt: new Date(), updatedAt: new Date() };
-  _sets.push(newSet);
-  schedulePersist();
+  const created = mapSet(await api.addSet({
+    folderId: set.folderId ?? null,
+    title: set.title,
+    description: set.description,
+  }));
+  _sets.push(created);
   notify();
-  return newSet;
+  return created;
 }
 
 export async function updateSet(id: number, changes: Partial<FlashcardSet>): Promise<void> {
+  const body: { title?: string; description?: string; folderId?: number | null } = {};
+  if (changes.title !== undefined) body.title = changes.title;
+  if (changes.description !== undefined) body.description = changes.description;
+  if (changes.folderId !== undefined) body.folderId = changes.folderId;
+  const updated = mapSet(await api.updateSet(id, body));
   const idx = _sets.findIndex(s => s.id === id);
-  if (idx === -1) return;
-  _sets[idx] = { ..._sets[idx], ...changes, updatedAt: new Date() };
-  schedulePersist();
+  if (idx !== -1) _sets[idx] = updated;
   notify();
 }
 
 export async function deleteSet(id: number): Promise<void> {
+  await api.deleteSet(id);
   _sets = _sets.filter(s => s.id !== id);
   _cards = _cards.filter(c => c.setId !== id);
-  schedulePersist();
+  _cardsBySet.delete(id);
+  _practiceSessions = _practiceSessions.filter(p => p.setId !== id);
   notify();
 }
 
 // ── Cards ────────────────────────────────────────────────────────────
 
 export function getAllCards(): Card[] { return _cards; }
-export function getCardsBySet(setId: number): Card[] { return _cards.filter(c => c.setId === setId); }
+export function getCardsBySet(setId: number): Card[] { return _cardsBySet.get(setId) ?? []; }
 
 export async function addCards(cards: Omit<Card, 'id' | 'createdAt'>[]): Promise<Card[]> {
-  let idCounter = nextId(_cards);
-  const newCards: Card[] = cards.map(c => ({
-    ...c,
-    id: idCounter++,
-    createdAt: new Date(),
-  }));
-  _cards.push(...newCards);
-  schedulePersist();
+  if (cards.length === 0) return [];
+  const setId = cards[0].setId;
+  const created = (await api.addCards(
+    setId,
+    cards.map(c => ({
+      setId,
+      term: c.term,
+      definition: c.definition,
+      definitionAttachments: c.definitionAttachments,
+    }))
+  )).map(mapCard);
+  _cards.push(...created);
+  const list = _cardsBySet.get(setId) ?? [];
+  list.push(...created);
+  _cardsBySet.set(setId, list);
   notify();
-  return newCards;
+  return created;
+}
+
+export async function reorderCards(setId: number, cardIds: number[]): Promise<void> {
+  await api.reorderCards(setId, cardIds);
+  const list = _cardsBySet.get(setId);
+  if (!list) return;
+  const byId = new Map(list.map(c => [c.id, c]));
+  const ordered = cardIds
+    .map(id => byId.get(id))
+    .filter((c): c is Card => c != null);
+  const rest = list.filter(c => !ordered.some(o => o.id === c.id));
+  const next = [...ordered, ...rest];
+  _cardsBySet.set(setId, next);
+  _cards = _cards.filter(c => c.setId !== setId).concat(next);
+  notify();
 }
 
 export async function updateCard(id: number, changes: Partial<Card>): Promise<void> {
+  const body: { term?: string; definition?: string; definitionAttachments?: Attachment[] } = {};
+  if (changes.term !== undefined) body.term = changes.term;
+  if (changes.definition !== undefined) body.definition = changes.definition;
+  if (changes.definitionAttachments !== undefined) body.definitionAttachments = changes.definitionAttachments;
+  const updated = mapCard(await api.updateCard(id, body));
   const idx = _cards.findIndex(c => c.id === id);
-  if (idx === -1) return;
-  _cards[idx] = { ..._cards[idx], ...changes };
-  schedulePersist();
+  if (idx !== -1) {
+    _cards[idx] = updated;
+    const list = _cardsBySet.get(updated.setId);
+    if (list) {
+      const listIdx = list.findIndex(c => c.id === id);
+      if (listIdx !== -1) list[listIdx] = updated;
+    }
+  }
   notify();
 }
 
 export async function deleteCard(id: number): Promise<void> {
+  await api.deleteCard(id);
+  const removed = _cards.find(c => c.id === id);
   _cards = _cards.filter(c => c.id !== id);
-  schedulePersist();
+  if (removed) {
+    const list = _cardsBySet.get(removed.setId);
+    if (list) {
+      const filtered = list.filter(c => c.id !== id);
+      if (filtered.length === 0) _cardsBySet.delete(removed.setId);
+      else _cardsBySet.set(removed.setId, filtered);
+    }
+  }
   notify();
 }
 
-export function deduplicateCards(setId: number): void {
-  const setCards = _cards.filter(c => c.setId === setId);
-  const seen = new Map<string, Card>();
-  const toKeep = new Set<number>();
+// ── Practice sessions ────────────────────────────────────────────────
 
-  for (const card of setCards) {
-    const key = `${card.term}|||${card.definition}`;
-    const existing = seen.get(key);
-    if (!existing || card.definition.length > existing.definition.length) {
-      seen.set(key, card);
-    }
+export function getPracticeSession(setId: number): PracticeSession | undefined {
+  return _practiceSessions.find(p => p.setId === setId);
+}
+
+export async function savePracticeSession(session: PracticeSession): Promise<void> {
+  const saved = await api.saveSession(session.setId, session);
+  const idx = _practiceSessions.findIndex(p => p.setId === session.setId);
+  if (idx === -1) {
+    _practiceSessions.push(saved);
+  } else {
+    _practiceSessions[idx] = saved;
   }
+  notify();
+}
 
-  for (const card of seen.values()) {
-    toKeep.add(card.id!);
-  }
-
-  const otherCards = _cards.filter(c => c.setId !== setId);
-  const dedupedSetCards = setCards.filter(c => toKeep.has(c.id!));
-  _cards = [...otherCards, ...dedupedSetCards];
-  schedulePersist();
+export async function deletePracticeSession(setId: number): Promise<void> {
+  await api.deleteSession(setId);
+  _practiceSessions = _practiceSessions.filter(p => p.setId !== setId);
   notify();
 }

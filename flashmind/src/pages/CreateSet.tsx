@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, Trash2, GripVertical, Play, Cloud, CloudOff } from 'lucide-react';
 import { useSet, useCards, useSets } from '../hooks/useDB';
+import { reorderCards } from '../lib/store';
 import ImageUpload from '../components/ImageUpload';
 import AudioRecorder from '../components/AudioRecorder';
 import type { Attachment } from '../lib/types';
@@ -38,7 +39,7 @@ export default function CreateSet() {
   }, [isNew, setId, navigate]);
 
   const existingSet = useSet(setId);
-  const { cards: existingCards, deleteCard, bulkAddCards, updateCard: updateStoredCard, addCard } = useCards(setId);
+  const { cards: existingCards, deleteCard, bulkAddCards, updateCard: updateStoredCard } = useCards(setId);
   const { addSet, updateSet } = useSets();
 
   const [title, setTitle] = useState('');
@@ -46,16 +47,20 @@ export default function CreateSet() {
   const [cards, setCards] = useState<CardDraft[]>([
     { key: makeKey(), term: '', definition: '', definitionAttachments: [] },
   ]);
-  const [error, setError] = useState('');
+  const [error] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | 'saving'>('saved');
 
   const termRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const defRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
+  const dragKeyRef = useRef<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCreatedRef = useRef(false);
   const pendingDeleteIdsRef = useRef<Set<number>>(new Set());
+  const dirtyKeysRef = useRef<Set<string>>(new Set());
   const initialLoadRef = useRef(true);
+  const lastOrderRef = useRef('');
 
   const titleRef = useRef(title);
   const descRef = useRef(description);
@@ -74,6 +79,7 @@ export default function CreateSet() {
 
   useEffect(() => {
     if (existingCards.length > 0 && cards.length === 1 && !cards[0].term) {
+      lastOrderRef.current = existingCards.map(c => c.id).join(',');
       setCards(existingCards.map(c => ({
         key: makeKey(),
         id: c.id,
@@ -84,23 +90,23 @@ export default function CreateSet() {
     }
   }, [existingCards]);
 
-  // Auto-create set on first meaningful input for new sets
-  useEffect(() => {
-    if (!isNew || autoCreatedRef.current) return;
-    const hasContent = title.trim() || description.trim() || cards.some(c => c.term.trim() || c.definition.trim());
-    if (!hasContent) return;
-
-    autoCreatedRef.current = true;
-    const timer = setTimeout(async () => {
-      const newId = await addSet({
-        folderId: null,
-        title: title.trim() || 'Untitled',
-        description: description.trim() || '',
-      });
-      navigate(`/edit/${newId}`, { replace: true });
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [title, description, cards, isNew, addSet, navigate]);
+  const createSetAndSave = useCallback(async () => {
+    const newId = await addSet({
+      folderId: null,
+      title: titleRef.current.trim() || 'Untitled',
+      description: descRef.current.trim() || '',
+    });
+    const cardsToSave = cardsRef.current.filter(c => c.term.trim() || c.definition.trim());
+    if (cardsToSave.length > 0) {
+      await bulkAddCards(cardsToSave.map(c => ({
+        setId: newId,
+        term: c.term,
+        definition: c.definition,
+        definitionAttachments: c.definitionAttachments,
+      })));
+    }
+    return newId;
+  }, [addSet, bulkAddCards]);
 
   const performAutoSave = useCallback(async () => {
     if (isNew || !setId) return;
@@ -110,7 +116,7 @@ export default function CreateSet() {
 
       for (const card of cardsRef.current) {
         if (!card.term.trim() && !card.definition.trim()) continue;
-        if (card.id) {
+        if (card.id && dirtyKeysRef.current.has(card.key)) {
           await updateStoredCard(card.id, {
             term: card.term,
             definition: card.definition,
@@ -118,6 +124,7 @@ export default function CreateSet() {
           });
         }
       }
+      dirtyKeysRef.current.clear();
 
       for (const id of pendingDeleteIdsRef.current) {
         await deleteCard(id);
@@ -125,6 +132,7 @@ export default function CreateSet() {
       pendingDeleteIdsRef.current.clear();
 
       const newCardsToSave = cardsRef.current.filter(c => !c.id && (c.term.trim() || c.definition.trim()));
+      const savedIdByKey = new Map<string, number>();
       if (newCardsToSave.length > 0) {
         const savedCards = await bulkAddCards(newCardsToSave.map(c => ({
           setId: setId!,
@@ -132,13 +140,24 @@ export default function CreateSet() {
           definition: c.definition,
           definitionAttachments: c.definitionAttachments,
         })));
-        setCards(prev => prev.map(c => {
-          const idx = newCardsToSave.findIndex(nc => nc.key === c.key);
-          if (idx !== -1 && savedCards[idx]) {
-            return { ...c, id: savedCards[idx].id };
+        newCardsToSave.forEach((nc, idx) => {
+          if (savedCards[idx] && savedCards[idx].id != null) {
+            savedIdByKey.set(nc.key, savedCards[idx].id!);
           }
-          return c;
+        });
+        setCards(prev => prev.map(c => {
+          const id = savedIdByKey.get(c.key);
+          return id != null ? { ...c, id } : c;
         }));
+      }
+
+      const orderedIds = cardsRef.current
+        .map(c => c.id ?? savedIdByKey.get(c.key))
+        .filter((id): id is number => typeof id === 'number');
+      const orderKey = orderedIds.join(',');
+      if (orderKey !== lastOrderRef.current && orderedIds.length > 0) {
+        await reorderCards(setId!, orderedIds);
+        lastOrderRef.current = orderKey;
       }
 
       setSaveStatus('saved');
@@ -149,13 +168,28 @@ export default function CreateSet() {
   }, [isNew, setId, updateSet, updateStoredCard, deleteCard, bulkAddCards]);
 
   const triggerAutoSave = useCallback(() => {
-    if (isNew) return;
-    setSaveStatus('unsaved');
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(performAutoSave, AUTO_SAVE_DELAY);
-  }, [isNew, performAutoSave]);
+    setSaveStatus('unsaved');
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        if (isNew) {
+          if (autoCreatedRef.current) return;
+          autoCreatedRef.current = true;
+          setSaveStatus('saving');
+          const newId = await createSetAndSave();
+          navigate(`/set/${newId}`, { replace: true });
+        } else if (setId) {
+          await performAutoSave();
+        }
+      } catch (err) {
+        setSaveStatus('unsaved');
+        console.error('Auto-save failed:', err);
+      }
+    }, AUTO_SAVE_DELAY);
+  }, [isNew, setId, createSetAndSave, performAutoSave, navigate]);
 
   const updateCard = (key: string, field: keyof CardDraft, value: any) => {
+    dirtyKeysRef.current.add(key);
     setCards(prev => prev.map(c => c.key === key ? { ...c, [field]: value } : c));
     triggerAutoSave();
   };
@@ -167,11 +201,69 @@ export default function CreateSet() {
     return newKey;
   }, [triggerAutoSave]);
 
+  const insertCardAfter = useCallback((afterKey: string) => {
+    const newKey = makeKey();
+    setCards(prev => {
+      const idx = prev.findIndex(c => c.key === afterKey);
+      const card = { key: newKey, term: '', definition: '', definitionAttachments: [] };
+      const next = [...prev];
+      next.splice(idx + 1, 0, card);
+      return next;
+    });
+    triggerAutoSave();
+    return newKey;
+  }, [triggerAutoSave]);
+
   const removeCard = (key: string) => {
     if (cards.length <= 1) return;
     const card = cards.find(c => c.key === key);
     if (card?.id) pendingDeleteIdsRef.current.add(card.id);
     setCards(prev => prev.filter(c => c.key !== key));
+    triggerAutoSave();
+  };
+
+  const handleDragStart = (e: React.DragEvent, key: string) => {
+    dragKeyRef.current = key;
+    e.dataTransfer.effectAllowed = 'move';
+    (e.currentTarget as HTMLElement).style.opacity = '0.4';
+  };
+
+  const handleDragOver = (e: React.DragEvent, key: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragKeyRef.current && dragKeyRef.current !== key) {
+      setDragOverKey(key);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverKey(null);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    (e.currentTarget as HTMLElement).style.opacity = '';
+    dragKeyRef.current = null;
+    setDragOverKey(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault();
+    const sourceKey = dragKeyRef.current;
+    dragKeyRef.current = null;
+    setDragOverKey(null);
+    (e.currentTarget as HTMLElement).style.opacity = '';
+
+    if (!sourceKey || sourceKey === targetKey) return;
+
+    setCards(prev => {
+      const fromIdx = prev.findIndex(c => c.key === sourceKey);
+      const toIdx = prev.findIndex(c => c.key === targetKey);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
     triggerAutoSave();
   };
 
@@ -187,6 +279,27 @@ export default function CreateSet() {
       e.preventDefault();
       const defEl = defRefs.current.get(cardKey);
       if (defEl) defEl.focus();
+    }
+  };
+
+  const handleDefPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>, cardKey: string) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          updateCard(cardKey, 'definitionAttachments', [
+            ...cardsRef.current.find(c => c.key === cardKey)?.definitionAttachments ?? [],
+            { type: 'image' as const, data: reader.result as string, name: `pasted-${Date.now()}.png` },
+          ]);
+        };
+        reader.readAsDataURL(file);
+        break;
+      }
     }
   };
 
@@ -211,13 +324,27 @@ export default function CreateSet() {
     }
   };
 
-  const handleBack = () => {
+  const handleBack = useCallback(async () => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    if (!isNew && setId && saveStatus !== 'saved') {
-      performAutoSave();
+    if (isNew) {
+      const hasContent = titleRef.current.trim() || descRef.current.trim() ||
+        cardsRef.current.some(c => c.term.trim() || c.definition.trim());
+      if (hasContent && !autoCreatedRef.current) {
+        autoCreatedRef.current = true;
+        setSaveStatus('saving');
+        try {
+          await createSetAndSave();
+        } catch (err) {
+          console.error('Auto-save failed:', err);
+        }
+      }
+    } else if (setId && saveStatus !== 'saved') {
+      await performAutoSave();
     }
     navigate('/');
-  };
+  }, [isNew, setId, saveStatus, createSetAndSave, performAutoSave, navigate]);
+
+  const largeSet = cards.length > 50;
 
   useEffect(() => {
     return () => {
@@ -228,43 +355,41 @@ export default function CreateSet() {
   return (
     <div className="min-h-full" onKeyDown={handleKeyDown}>
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-[var(--color-bg-primary)] border-b border-[var(--color-border)] px-6 py-4">
-        <div className="flex items-center justify-between max-w-4xl mx-auto">
-          <div className="flex items-center gap-3">
+      <div className="sticky top-0 z-20 bg-[var(--color-bg-primary)] border-b border-[var(--color-border)] px-4 sm:px-6 py-4">
+        <div className="flex items-center justify-between gap-3 max-w-4xl mx-auto">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={handleBack}
-              className="w-9 h-9 rounded-lg border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all"
+              className="w-9 h-9 rounded-lg border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all shrink-0"
             >
               <ArrowLeft size={16} />
             </button>
-            <h1 className="font-display font-semibold text-lg">
+            <h1 className="font-display font-semibold text-base sm:text-lg truncate">
               {isNew ? 'New Flashcard Set' : 'Edit Set'}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
-            {!isNew && (
-              <div className="flex items-center gap-1.5 text-xs font-medium">
-                {saveStatus === 'saving' && (
-                  <span className="text-[var(--color-text-muted)] flex items-center gap-1">
-                    <Cloud size={14} className="animate-pulse" /> Saving...
-                  </span>
-                )}
-                {saveStatus === 'saved' && (
-                  <span className="text-[var(--color-success)] flex items-center gap-1">
-                    <Cloud size={14} /> Saved
-                  </span>
-                )}
-                {saveStatus === 'unsaved' && (
-                  <span className="text-[var(--color-text-muted)] flex items-center gap-1">
-                    <CloudOff size={14} /> Unsaved
-                  </span>
-                )}
-              </div>
-            )}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="hidden sm:flex items-center gap-1.5 text-xs font-medium">
+              {saveStatus === 'saving' && (
+                <span className="text-[var(--color-text-muted)] flex items-center gap-1">
+                  <Cloud size={14} className="animate-pulse" /> Saving...
+                </span>
+              )}
+              {saveStatus === 'saved' && (
+                <span className="text-[var(--color-success)] flex items-center gap-1">
+                  <Cloud size={14} /> Saved
+                </span>
+              )}
+              {saveStatus === 'unsaved' && (
+                <span className="text-[var(--color-text-muted)] flex items-center gap-1">
+                  <CloudOff size={14} /> Unsaved
+                </span>
+              )}
+            </div>
             {!isNew && (
               <button
                 onClick={() => navigate(`/practice/${setId}`)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-success)] text-[var(--color-paper-ink)] text-sm font-semibold hover:opacity-90 transition-opacity"
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-[var(--color-success)] text-[var(--color-paper-ink)] text-sm font-semibold hover:opacity-90 transition-opacity"
               >
                 <Play size={14} />
                 Practice
@@ -315,15 +440,21 @@ export default function CreateSet() {
             </h2>
           </div>
 
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence mode={largeSet ? 'sync' : 'popLayout'}>
             {cards.map((card, index) => (
               <motion.div
                 key={card.key}
-                layout
+                layout={!largeSet}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-5"
+                draggable
+                onDragStart={(e: any) => handleDragStart(e, card.key)}
+                onDragOver={(e: React.DragEvent) => handleDragOver(e, card.key)}
+                onDragLeave={handleDragLeave}
+                onDragEnd={(e: any) => handleDragEnd(e)}
+                onDrop={(e: React.DragEvent) => handleDrop(e, card.key)}
+                className={`group bg-[var(--color-bg-card)] border rounded-xl p-5 transition-all ${dragOverKey === card.key ? 'border-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/10 scale-[1.01]' : 'border-[var(--color-border)]'}`}
               >
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -368,6 +499,7 @@ export default function CreateSet() {
                         updateCard(card.key, 'definition', e.target.value);
                         resizeDef(e.currentTarget);
                       }}
+                      onPaste={e => handleDefPaste(e, card.key)}
                       onKeyDown={e => handleDefKeyDown(e, card.key, index)}
                       placeholder={"Enter definition...\n``` for code blocks\n`code` for inline code"}
                       rows={1}
@@ -391,6 +523,14 @@ export default function CreateSet() {
                     </div>
                   </div>
                 </div>
+
+                <button
+                  onClick={() => insertCardAfter(card.key)}
+                  className="mt-3 w-full py-1.5 rounded-lg border border-dashed border-[var(--color-border)] text-[var(--color-text-muted)] opacity-100 md:opacity-0 md:group-hover:opacity-60 md:hover:opacity-100 transition-all text-xs font-medium flex items-center justify-center gap-1 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                >
+                  <Plus size={12} />
+                  Add card below
+                </button>
               </motion.div>
             ))}
           </AnimatePresence>

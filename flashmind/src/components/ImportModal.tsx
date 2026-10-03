@@ -126,7 +126,7 @@ export default function ImportModal({ onClose, folderId = null }: ImportModalPro
 
         <div className="p-6 space-y-5">
           {/* Set info */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-[var(--color-text-secondary)] mb-1.5">Set Title *</label>
               <input
@@ -150,7 +150,7 @@ export default function ImportModal({ onClose, folderId = null }: ImportModalPro
           </div>
 
           {/* Separators */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-[var(--color-text-secondary)] mb-1.5">
                 Between Term & Definition
@@ -239,10 +239,12 @@ export default function ImportModal({ onClose, folderId = null }: ImportModalPro
               </div>
               <div className="max-h-48 overflow-y-auto border border-[var(--color-border)] rounded-lg divide-y divide-[var(--color-border)]">
                 {preview.map((p, i) => (
-                  <div key={i} className="flex px-4 py-2 text-sm">
-                    <span className="w-8 text-[var(--color-text-muted)] shrink-0">{i + 1}</span>
-                    <span className="font-medium mr-4 shrink-0">{p.term}</span>
-                    <span className="text-[var(--color-text-secondary)] truncate">{p.definition}</span>
+                  <div key={i} className="flex flex-col sm:flex-row sm:items-center px-4 py-2 text-sm min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-8 text-[var(--color-text-muted)] shrink-0">{i + 1}</span>
+                      <span className="font-medium truncate">{p.term}</span>
+                    </div>
+                    <span className="text-[var(--color-text-secondary)] truncate sm:ml-4">{p.definition}</span>
                   </div>
                 ))}
               </div>

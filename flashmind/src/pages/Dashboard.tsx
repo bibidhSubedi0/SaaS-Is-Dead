@@ -1,21 +1,39 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Plus, Upload, Search, BookOpen, Layers, MoreVertical, Trash2, Edit3
+  Plus, Upload, Download, Search, BookOpen, Layers, MoreVertical, Trash2, Edit3
 } from 'lucide-react';
 import { useFolders, useSets } from '../hooks/useDB';
 import FolderModal from '../components/FolderModal';
 import ImportModal from '../components/ImportModal';
+import { exportSets } from '../lib/export';
 import * as store from '../lib/store';
-import type { Folder } from '../lib/types';
+import type { FlashcardSet, Folder } from '../lib/types';
 
 const TAB_COLORS = ['var(--tab-1)', 'var(--tab-2)', 'var(--tab-3)', 'var(--tab-4)', 'var(--tab-5)', 'var(--tab-6)'];
+
+type SetSortMode = 'newest' | 'oldest' | 'name-asc' | 'name-desc';
+const SET_SORT_KEY = 'flashmind.setSort';
+
+function loadSetSort(): SetSortMode {
+  try {
+    const s = localStorage.getItem(SET_SORT_KEY);
+    if (s === 'newest' || s === 'oldest' || s === 'name-asc' || s === 'name-desc') return s;
+  } catch { /* ignore */ }
+  return 'newest';
+}
+
+function setTime(s: FlashcardSet) {
+  const t = new Date(s.updatedAt).getTime();
+  return Number.isFinite(t) ? t : (s.id ?? 0);
+}
 
 export default function Dashboard() {
   const { folders, deleteFolder } = useFolders();
   const { sets, deleteSet } = useSets();
   const [search, setSearch] = useState('');
+  const [setSort, setSetSort] = useState<SetSortMode>(loadSetSort);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [editFolder, setEditFolder] = useState<Folder | undefined>();
   const [showImport, setShowImport] = useState(false);
@@ -26,6 +44,30 @@ export default function Dashboard() {
     s.title.toLowerCase().includes(search.toLowerCase()) ||
     s.description.toLowerCase().includes(search.toLowerCase())
   );
+
+  const sortedSets = useMemo(() => {
+    const list = [...filteredSets];
+    switch (setSort) {
+      case 'oldest':
+        list.sort((a, b) => (setTime(a) - setTime(b)) || ((a.id ?? 0) - (b.id ?? 0)));
+        break;
+      case 'name-asc':
+        list.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? '') || ((a.id ?? 0) - (b.id ?? 0)));
+        break;
+      case 'name-desc':
+        list.sort((a, b) => (b.title ?? '').localeCompare(a.title ?? '') || ((a.id ?? 0) - (b.id ?? 0)));
+        break;
+      case 'newest':
+      default:
+        list.sort((a, b) => (setTime(b) - setTime(a)) || ((b.id ?? 0) - (a.id ?? 0)));
+    }
+    return list;
+  }, [filteredSets, setSort]);
+
+  const changeSetSort = (mode: SetSortMode) => {
+    setSetSort(mode);
+    try { localStorage.setItem(SET_SORT_KEY, mode); } catch { /* ignore */ }
+  };
 
   const handleDeleteSet = async (id: number) => {
     await deleteSet(id);
@@ -53,13 +95,13 @@ export default function Dashboard() {
       >
         <div className="flex items-center gap-2.5 mb-1.5">
           <Layers className="text-[var(--color-accent)]" size={22} />
-          <h1 className="font-display font-semibold text-3xl tracking-tight">Flashmind</h1>
+          <h1 className="font-display font-semibold text-2xl md:text-3xl tracking-tight">Flashmind</h1>
         </div>
         <p className="text-[var(--color-text-secondary)] text-sm">Your personal flashcard studio</p>
       </motion.div>
 
       {/* Search & Actions */}
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-2 sm:gap-3 mb-8">
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
           <input
@@ -76,6 +118,14 @@ export default function Dashboard() {
         >
           <Upload size={16} />
           <span className="hidden sm:inline">Import</span>
+        </button>
+        <button
+          onClick={() => exportSets(sets)}
+          disabled={sets.length === 0}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] text-sm text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all disabled:opacity-40 disabled:hover:border-[var(--color-border)] disabled:hover:text-[var(--color-text-secondary)]"
+        >
+          <Download size={16} />
+          <span className="hidden sm:inline">Export</span>
         </button>
         <Link
           to="/set/new"
@@ -120,7 +170,7 @@ export default function Dashboard() {
                     {sets.filter(s => s.folderId === folder.id).length} sets
                   </div>
                 </Link>
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={(e) => {
                       e.preventDefault();
@@ -170,9 +220,22 @@ export default function Dashboard() {
 
       {/* Sets */}
       <div>
-        <h2 className="font-data text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider mb-4">
-          {search ? 'Search Results' : 'All Sets'}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-data text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+            {search ? 'Search Results' : 'All Sets'}
+          </h2>
+          <select
+            value={setSort}
+            onChange={e => changeSetSort(e.target.value as SetSortMode)}
+            className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)] transition-colors cursor-pointer"
+            aria-label="Sort sets"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name-asc">Name A&ndash;Z</option>
+            <option value="name-desc">Name Z&ndash;A</option>
+          </select>
+        </div>
         {filteredSets.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
@@ -207,7 +270,7 @@ export default function Dashboard() {
           </motion.div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pb-4">
-            {filteredSets.map((set, i) => (
+            {sortedSets.map((set, i) => (
               <SetCard
                 key={set.id}
                 set={set}
@@ -280,7 +343,7 @@ function SetCard({ set, index, menuOpen, onMenuToggle, onDelete, onEdit }: {
           <span>{new Date(set.updatedAt).toLocaleDateString()}</span>
         </div>
       </Link>
-      <div className="absolute top-3 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-3 right-5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
         <button
           onClick={(e) => { e.preventDefault(); onMenuToggle(); }}
           className="w-7 h-7 rounded-lg bg-[var(--color-bg-secondary)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"

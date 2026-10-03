@@ -227,10 +227,12 @@ export default function ImportPage() {
 
             <div className="max-h-[50vh] overflow-y-auto border border-[var(--color-border)] rounded-xl divide-y divide-[var(--color-border)]">
               {preview.map((p, i) => (
-                <div key={i} className="flex px-4 py-3 text-sm">
-                  <span className="w-8 text-[var(--color-text-muted)] shrink-0">{i + 1}</span>
-                  <span className="font-medium mr-4 shrink-0 min-w-[120px]">{p.term}</span>
-                  <span className="text-[var(--color-text-secondary)] truncate">{p.definition}</span>
+                <div key={i} className="flex flex-col sm:flex-row sm:items-center px-4 py-3 text-sm min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-8 text-[var(--color-text-muted)] shrink-0">{i + 1}</span>
+                    <span className="font-medium truncate">{p.term}</span>
+                  </div>
+                  <span className="text-[var(--color-text-secondary)] truncate sm:ml-4">{p.definition}</span>
                 </div>
               ))}
             </div>

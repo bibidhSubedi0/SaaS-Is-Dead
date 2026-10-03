@@ -25,9 +25,22 @@ export interface Card {
 }
 
 export interface Attachment {
+  id?: number;
   type: 'image' | 'audio';
-  data: string;
   name: string;
+  data?: string;
+  url?: string;
+}
+
+export interface PracticeSession {
+  setId: number;
+  queue: number[];
+  currentIndex: number;
+  known: number[];
+  unknown: number[];
+  history: number[];
+  isComplete: boolean;
+  updatedAt: Date;
 }
 
 export interface ImportConfig {

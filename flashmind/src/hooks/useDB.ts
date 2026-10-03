@@ -3,21 +3,24 @@ import type { Folder, FlashcardSet, Card } from '../lib/types';
 import * as store from '../lib/store';
 
 export function useDBState() {
-  const [state, setState] = useState<'loading' | 'ready' | 'need-folder'>(
+  const [state, setState] = useState<'loading' | 'ready' | 'need-token'>(
     store.isLoaded() ? 'ready' : 'loading'
   );
 
   useEffect(() => {
     if (store.isLoaded()) { setState('ready'); return; }
-    store.init().then(s => setState(s));
+    store.init()
+      .then(setState)
+      .catch(() => setState('need-token'));
   }, []);
 
-  const pickFolder = useCallback(async () => {
-    const ok = await store.setFolder();
-    if (ok) setState('ready');
+  const submitToken = useCallback(async (token: string) => {
+    setState('loading');
+    const result = await store.setToken(token);
+    setState(result);
   }, []);
 
-  return { state, pickFolder };
+  return { state, submitToken };
 }
 
 function useVersion() {
@@ -81,6 +84,12 @@ export function useSet(setId: number | null) {
   const { v } = useVersion();
   void v;
   return setId ? store.getSet(setId) : undefined;
+}
+
+export function usePracticeSession(setId: number) {
+  const { v } = useVersion();
+  void v;
+  return store.getPracticeSession(setId);
 }
 
 export function useCards(setId: number | null) {

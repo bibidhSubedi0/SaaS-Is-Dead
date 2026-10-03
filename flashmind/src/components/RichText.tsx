@@ -60,8 +60,8 @@ export default function RichText({ text, className }: RichTextProps) {
       }
       i++; // skip closing ```
       elements.push(
-        <pre key={key++} className="my-2 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 overflow-x-auto text-[0.85em] text-left">
-          <code className="font-mono text-[var(--color-text-primary)] whitespace-pre">{codeLines.join('\n')}</code>
+        <pre key={key++} className="my-2 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 overflow-x-auto text-sm leading-relaxed text-left">
+          <code className="font-mono text-[var(--color-text-primary)] whitespace-pre-wrap break-words">{codeLines.join('\n')}</code>
         </pre>
       );
       continue;

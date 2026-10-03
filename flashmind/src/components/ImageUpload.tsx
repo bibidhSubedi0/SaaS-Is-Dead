@@ -49,10 +49,10 @@ export default function ImageUpload({ images, onChange }: ImageUploadProps) {
         <div className="flex flex-wrap gap-2">
           {images.map((img, i) => (
             <div key={i} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-[var(--color-border)]">
-              <img src={img.data} alt={img.name} className="w-full h-full object-cover" />
+              <img src={img.url ?? img.data} alt={img.name} className="w-full h-full object-cover" />
               <button
                 onClick={() => removeImage(i)}
-                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
               >
                 <X size={12} className="text-white" />
               </button>

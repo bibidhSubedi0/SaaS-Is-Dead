@@ -1,22 +1,35 @@
-#!/usr/bin/env node
-
+﻿#!/usr/bin/env node
 import { spawn } from 'child_process';
-import { exec } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const server = spawn('npx', ['vite', '--open'], {
+const extraArgs = process.argv.slice(2);
+
+const server = spawn('npx', ['tsx', 'server/index.ts'], {
   cwd: __dirname,
   stdio: 'inherit',
   shell: true,
 });
 
-server.on('error', (err) => {
-  console.error('Failed to start flashmind:', err.message);
-  process.exit(1);
+const vite = spawn('npx', ['vite', '--open', ...extraArgs], {
+  cwd: __dirname,
+  stdio: 'inherit',
+  shell: true,
 });
 
-process.on('SIGINT', () => server.kill('SIGINT'));
-process.on('SIGTERM', () => server.kill('SIGTERM'));
+for (const child of [server, vite]) {
+  child.on('error', (err) => {
+    console.error('Failed to start flashmind:', err.message);
+    process.exit(1);
+  });
+}
+
+process.on('SIGINT', () => {
+  server.kill('SIGINT');
+  vite.kill('SIGINT');
+});
+process.on('SIGTERM', () => {
+  server.kill('SIGTERM');
+  vite.kill('SIGTERM');
+});
